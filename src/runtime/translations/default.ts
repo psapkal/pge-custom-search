@@ -1,5 +1,5 @@
 export default {
-  _widgetLabel: 'Search',
+  _widgetLabel: 'PGE CustomSearch',
   showResult: 'Show search results for {searchText}',
   hideResult: 'Hide search results for {searchText}',
   allSearchSources: 'All search sources',
