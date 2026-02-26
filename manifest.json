@@ -1,6 +1,6 @@
 {
-  "name": "search",
-  "label": "Search",
+  "name": "pge-custom-search",
+  "label": "PGE Custom Search",
   "type": "widget",
   "version": "1.15.0",
   "exbVersion": "1.15.0",
