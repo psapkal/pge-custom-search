@@ -2,7 +2,7 @@ import {
   type QueriableDataSource, type DataSource, dataSourceUtils, ClauseLogic, ClauseOperator, DataSourceManager, Immutable, type QueryParams, type FeatureLayerDataSource,
   DataSourceStatus, type FieldSchema, JimuFieldType, type SqlExpression
 } from 'jimu-core'
-import { type IMConfig, type Suggestion, type IMSearchDataConfig, type DatasourceListItem, type RecordResultType, type IMDatasourceSQLList } from '../../config'
+import { type IMConfig, type Suggestion, type IMSearchDataConfig, type DatasourceListItem, type RecordResultType, type IMDatasourceSQLList, type SuggestionItem } from '../../config'
 import { getDatasource, checkIsDsCreated, getLocalId } from './utils'
 
 export interface QueryOption {
@@ -44,35 +44,63 @@ export async function fetchSuggestionRecords (
 ): Promise<Suggestion> {
   const { label, icon, configId } = dsConfigItem
   const useDatasourceId = datasourceListItem?.useDataSource?.dataSourceId
-  const datasource = getDatasource(useDatasourceId)
+  const datasource = getDatasource(useDatasourceId) as any
+  const fieldNames = (searchFields || []).map(field => field?.name || field?.jimuName).filter(Boolean)
+  const isSearchExact = datasourceListItem?.searchExact || false
+  const sqlExpression = datasourceListItem?.SuggestionSQL || getSQL(searchText, searchFields, datasource, isSearchExact)
+  const queryParams: any = Immutable({
+    where: sqlExpression?.sql || '1=0',
+    sqlExpression: sqlExpression?.sql ? sqlExpression : null,
+    outFields: fieldNames.length ? fieldNames : '*',
+    pageSize: maxSuggestions,
+    returnGeometry: false
+  })
 
-  const option = {
-    searchText,
-    searchFields: searchFields.map(schema => schema.name),
-    dataSource: datasource,
-    maxSuggestions
-  }
-  return dataSourceUtils.querySuggestions(option).then(suggest => {
-    const searchSuggestion = suggest?.map(item => {
-      return {
-        ...item,
-        configId: configId,
+  return datasource?.query(queryParams).then(queryResult => {
+    const records = queryResult?.records || []
+    const uniqueSuggestions = new Set<string>()
+    const suggestionItem: SuggestionItem[] = []
+    records.forEach(record => {
+      const suggestionValue = getSuggestionValue(record, searchFields)
+      const suggestionText = suggestionValue != null ? `${suggestionValue}` : ''
+      if (!suggestionText || uniqueSuggestions.has(suggestionText)) return
+      uniqueSuggestions.add(suggestionText)
+      suggestionItem.push({
+        suggestionHtml: suggestionText,
+        suggestion: suggestionText,
+        configId,
         isFromSuggestion: true
-      }
+      })
     })
+
     const suggestion: Suggestion = {
-      suggestionItem: searchSuggestion,
+      suggestionItem: suggestionItem.slice(0, maxSuggestions),
       layer: label,
-      icon: icon
+      icon
     }
     return Promise.resolve(suggestion)
-  }).catch((error) => {
+  }).catch(() => {
     return Promise.resolve({
       suggestionItem: [],
       layer: null,
       icon: null
     })
   })
+}
+
+function getSuggestionValue (record: any, searchFields: FieldSchema[]): string | number {
+  for (const field of searchFields || []) {
+    const jimuName = field?.jimuName
+    const name = field?.name
+    const valueByJimuName = jimuName ? record?.getFieldValue?.(jimuName) : undefined
+    const valueByName = name ? record?.getFieldValue?.(name) : undefined
+    const attrValue = record?.feature?.attributes?.[name]
+    const value = valueByJimuName ?? valueByName ?? attrValue
+    if (value !== null && value !== undefined && `${value}`.trim() !== '') {
+      return value
+    }
+  }
+  return ''
 }
 
 /**
@@ -103,7 +131,9 @@ export function getSQL (
       const isNumber = searchText?.length > 0 && !isNaN(Number(newSearchText)) && isFinite(Number(newSearchText))
       if (field.type === JimuFieldType.Number && !isNumber) return false
       const clauseOperator = getClauseOperator(field.type, searchExact)
-      const searchValue = field.type === JimuFieldType.Number ? Number(newSearchText) : newSearchText
+      const searchValue = field.type === JimuFieldType.Number
+        ? Number(newSearchText)
+        : newSearchText
       const clause = dataSourceUtils.createSQLClause(field?.name, clauseOperator, [{ value: searchValue, label: searchValue + '' }])
       clauses.push(clause)
     })

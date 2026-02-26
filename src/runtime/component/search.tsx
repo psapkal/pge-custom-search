@@ -776,7 +776,7 @@ const SearchInput = (props: SearchSettingProps) => {
       const searchFields = serviceList[configId].searchFields?.asMutable({ deep: true }) || []
       const searchExact = serviceList[configId].searchExact || false
       const SQL = getSQL(searchText, searchFields, ds, searchExact)
-      const SuggestionSQL = getSQL(searchText, searchFields, ds, false)
+      const SuggestionSQL = getSQL(searchText, searchFields, ds, searchExact)
       newServiceList = newServiceList
         .setIn([configId, 'SQL'], SQL)
         .setIn([configId, 'SuggestionSQL'], SuggestionSQL)
