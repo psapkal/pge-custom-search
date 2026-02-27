@@ -215,8 +215,9 @@ export const addressToLocations = async (addressToLocationsOption: AddressToLoca
 export const loadSuggest = (geocodeURL: string, address: string, maxSuggestion: number, utilityId: string): Promise<__esri.SuggestionResult[]> => {
   return loadArcGISJSAPIModules(['esri/rest/locator']).then(modules => {
     const [locator] = modules
+    const suggestText = address ? `%${address}%` : address
     return locator.suggestLocations(geocodeURL, {
-      text: address,
+      text: suggestText,
       maxSuggestions: maxSuggestion
     }).then(response => {
       reportUtilitySuccess(utilityId)
