@@ -5,6 +5,11 @@ import {
 import { type IMConfig, type Suggestion, type IMSearchDataConfig, type DatasourceListItem, type RecordResultType, type IMDatasourceSQLList, type SuggestionItem } from '../../config'
 import { getDatasource, checkIsDsCreated, getLocalId } from './utils'
 
+interface CodedValueItem {
+  value: string | number
+  label: string
+}
+
 export interface QueryOption {
   returnGeometry?: boolean
   geometry?: any
@@ -61,7 +66,7 @@ export async function fetchSuggestionRecords (
     const uniqueSuggestions = new Set<string>()
     const suggestionItem: SuggestionItem[] = []
     records.forEach(record => {
-      const suggestionValue = getSuggestionValue(record, searchFields)
+      const suggestionValue = getSuggestionValue(record, searchFields, datasource)
       const suggestionText = suggestionValue != null ? `${suggestionValue}` : ''
       if (!suggestionText || uniqueSuggestions.has(suggestionText)) return
       uniqueSuggestions.add(suggestionText)
@@ -72,6 +77,9 @@ export async function fetchSuggestionRecords (
         isFromSuggestion: true
       })
     })
+
+    const codedValueSuggestions = getCodedValueSuggestions(searchText, datasource, searchFields, configId, uniqueSuggestions)
+    suggestionItem.push(...codedValueSuggestions)
 
     const suggestion: Suggestion = {
       suggestionItem: suggestionItem.slice(0, maxSuggestions),
@@ -88,7 +96,7 @@ export async function fetchSuggestionRecords (
   })
 }
 
-function getSuggestionValue (record: any, searchFields: FieldSchema[]): string | number {
+function getSuggestionValue (record: any, searchFields: FieldSchema[], datasource: DataSource): string | number {
   for (const field of searchFields || []) {
     const jimuName = field?.jimuName
     const name = field?.name
@@ -97,10 +105,61 @@ function getSuggestionValue (record: any, searchFields: FieldSchema[]): string |
     const attrValue = record?.feature?.attributes?.[name]
     const value = valueByJimuName ?? valueByName ?? attrValue
     if (value !== null && value !== undefined && `${value}`.trim() !== '') {
-      return value
+      const codedValues = getFieldCodedValueList(datasource, field)
+      const codedLabel = getCodedLabelByValue(value, codedValues)
+      return codedLabel ?? value
     }
   }
   return ''
+}
+
+function getCodedValueSuggestions (
+  searchText: string,
+  datasource: DataSource,
+  searchFields: FieldSchema[],
+  configId: string,
+  uniqueSuggestions: Set<string>
+): SuggestionItem[] {
+  const suggestionItems: SuggestionItem[] = []
+  const keyword = (searchText || '').trim().toLocaleLowerCase()
+  if (!keyword) return suggestionItems
+
+  for (const field of searchFields || []) {
+    const codedValues = getFieldCodedValueList(datasource, field)
+    codedValues?.forEach(codedValue => {
+      const suggestionText = `${codedValue?.label || ''}`.trim()
+      if (!suggestionText) return
+      if (!suggestionText.toLocaleLowerCase().includes(keyword)) return
+      if (uniqueSuggestions.has(suggestionText)) return
+      uniqueSuggestions.add(suggestionText)
+      suggestionItems.push({
+        suggestionHtml: suggestionText,
+        suggestion: suggestionText,
+        configId,
+        isFromSuggestion: true
+      })
+    })
+  }
+
+  return suggestionItems
+}
+
+function getFieldCodedValueList (datasource: DataSource, field: FieldSchema): CodedValueItem[] {
+  const flDatasource = datasource as FeatureLayerDataSource
+  if (!flDatasource?.getFieldCodedValueList) return []
+
+  const fieldName = field?.name || field?.jimuName
+  if (!fieldName) return []
+  const codedValues = flDatasource.getFieldCodedValueList(fieldName)
+  return (codedValues || []) as CodedValueItem[]
+}
+
+function getCodedLabelByValue (value: string | number, codedValues: CodedValueItem[]): string | null {
+  if (!codedValues?.length) return null
+  const match = codedValues.find(item => {
+    return item?.value === value || `${item?.value}` === `${value}`
+  })
+  return match?.label || null
 }
 
 /**
