@@ -172,7 +172,6 @@ export function getSQL (
   searchExact: boolean
 ): SqlExpression {
   if (searchFields) {
-    const isNumericSearchText = searchText?.length > 0 && !isNaN(Number(searchText)) && isFinite(Number(searchText))
     const clauses: any[] = []
     searchFields.forEach(field => {
       let newSearchText = searchText as any
@@ -190,7 +189,7 @@ export function getSQL (
       }
       const isNumber = searchText?.length > 0 && !isNaN(Number(newSearchText)) && isFinite(Number(newSearchText))
       if (field.type === JimuFieldType.Number && !isNumber) return false
-      const clauseOperator = getClauseOperator(field.type, searchExact, isNumericSearchText)
+      const clauseOperator = getClauseOperator(field.type, searchExact)
       const searchValue = field.type === JimuFieldType.Number
         ? Number(newSearchText)
         : newSearchText
@@ -303,12 +302,12 @@ export const loadDsRecords = (serviceListItem: DatasourceListItem, resultMaxNumb
   })
 }
 
-function getClauseOperator (fieldType: JimuFieldType, searchExact: boolean, isNumericSearchText: boolean): ClauseOperator {
+function getClauseOperator (fieldType: JimuFieldType, searchExact: boolean): ClauseOperator {
   let clauseOperator: ClauseOperator
   if (fieldType === JimuFieldType.Number) {
     clauseOperator = ClauseOperator.NumberOperatorIs
   } else if (fieldType === JimuFieldType.String) {
-    clauseOperator = (searchExact || isNumericSearchText) ? ClauseOperator.StringOperatorIs : ClauseOperator.StringOperatorContains
+    clauseOperator = searchExact ? ClauseOperator.StringOperatorIs : ClauseOperator.StringOperatorContains
   }
   return clauseOperator
 }
